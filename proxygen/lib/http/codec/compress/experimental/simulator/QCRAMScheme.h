@@ -56,31 +56,28 @@ class QCRAMScheme : public CompressionScheme {
     }
   }
 
-  std::pair<FrameFlags, std::unique_ptr<folly::IOBuf>> encode(
-      bool /*newPacket*/,
-      std::vector<compress::Header> allHeaders, SimStats& stats) override {
+  std::pair<bool, std::unique_ptr<folly::IOBuf>> encode(
+    std::vector<compress::Header> allHeaders, SimStats& stats) override {
     index++;
     bool eviction = false;
     auto block = client_.encode(allHeaders, eviction);
     stats.uncompressed += client_.getEncodedSize().uncompressed;
     stats.compressed += client_.getEncodedSize().compressed;
     // OOO is allowed if there has not been an eviction
-    FrameFlags flags;
-    flags.allowOOO = !eviction;
-    return {flags, std::move(block)};
+    return {!eviction, std::move(block)};
   }
 
-  void decode(FrameFlags flags, std::unique_ptr<folly::IOBuf> encodedReq,
+  void decode(bool allowOOO, std::unique_ptr<folly::IOBuf> encodedReq,
               SimStats& stats, SimStreamingCallback& callback) override {
     folly::io::Cursor cursor(encodedReq.get());
     auto seqn = cursor.readBE<uint16_t>();
     callback.seqn = seqn;
     VLOG(1) << "Decoding request=" << callback.requestIndex << " header seqn="
-            << seqn << " allowOOO=" << uint32_t(flags.allowOOO);
+            << seqn << " allowOOO=" << uint32_t(allowOOO);
     auto len = cursor.totalLength();
     encodedReq->trimStart(sizeof(uint16_t));
     serverQueue_.enqueueHeaderBlock(seqn, std::move(encodedReq), len,
-                                    &callback, flags.allowOOO);
+                                    &callback, allowOOO);
     callback.maybeMarkHolDelay();
     if (serverQueue_.getQueuedBytes() > stats.maxQueueBufferBytes) {
       stats.maxQueueBufferBytes = serverQueue_.getQueuedBytes();

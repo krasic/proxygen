@@ -46,10 +46,9 @@ class QPACKScheme : public CompressionScheme {
     client_.applyAcks(qpackAck->acks.get());
   }
 
-  std::pair<FrameFlags, std::unique_ptr<folly::IOBuf>> encode(
-      bool /*newPacket*/,
-      std::vector<compress::Header> allHeaders,
-      SimStats& stats) override {
+  std::pair<bool, std::unique_ptr<folly::IOBuf>> encode(
+    std::vector<compress::Header> allHeaders,
+    SimStats& stats) override {
     index++;
     auto result = client_.encodeQuic(allHeaders);
     stats.uncompressed += client_.getEncodedSize().uncompressed;
@@ -74,14 +73,13 @@ class QPACKScheme : public CompressionScheme {
       header->prependChain(std::move(result.second));
     }
     // OOO is always allowed
-    struct FrameFlags flags{.allowOOO = true};
-    return {flags, std::move(header)};
+    return {true, std::move(header)};
   }
 
-  void decode(FrameFlags flags, std::unique_ptr<folly::IOBuf> encodedReq,
+  void decode(bool allowOOO, std::unique_ptr<folly::IOBuf> encodedReq,
               SimStats& stats, SimStreamingCallback& callback) override {
     VLOG(1) << "Decoding request=" << callback.requestIndex << " allowOOO="
-            << uint32_t(flags.allowOOO);
+            << uint32_t(allowOOO);
     folly::io::Cursor c(encodedReq.get());
     auto controlLen = c.readBE<uint32_t>();
     std::unique_ptr<folly::IOBuf> controlBlock;

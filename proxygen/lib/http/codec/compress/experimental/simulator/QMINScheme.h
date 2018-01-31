@@ -246,9 +246,8 @@ class QMINScheme : public CompressionScheme {
     }
   }
 
-  std::pair<FrameFlags, std::unique_ptr<folly::IOBuf>> encode(
-      bool /*newPacket*/,
-      std::vector<compress::Header> allHeaders, SimStats& stats) override
+  std::pair<bool, std::unique_ptr<folly::IOBuf>> encode(
+    std::vector<compress::Header> allHeaders, SimStats& stats) override
   {
     const size_t max_ctl = 0x1000;
     const size_t max_comp = 0x1000;
@@ -256,7 +255,6 @@ class QMINScheme : public CompressionScheme {
     unsigned char *const comp = outbuf + max_ctl;
     size_t nw, comp_sz;
     enum qmin_encode_status qes;
-    FrameFlags flags;
 
     qms_ctl[0].out.qco_ctx = this;
     comp_sz = 0;
@@ -280,11 +278,11 @@ class QMINScheme : public CompressionScheme {
       case QES_NOBUFS:
         VLOG(1) << "compressed header does not fit into temporary "
           "output buffer";
-        return {flags, nullptr};
+        return {false, nullptr};
       case QES_ERR:
         VLOG(1) << "error: " << strerror(errno);
         assert(0);
-        return {flags, nullptr};
+        return {false, nullptr};
       }
     }
 
@@ -326,14 +324,13 @@ class QMINScheme : public CompressionScheme {
            &qms_next_stream_id_to_encode, sizeof(qms_next_stream_id_to_encode));
 
     qms_next_stream_id_to_encode += 2;
-    flags.allowOOO = true;
-    return {flags, folly::IOBuf::copyBuffer(
+    return {true, folly::IOBuf::copyBuffer(
       outbuf + max_ctl - ctl_msg_sz_with_off -
       sizeof(ctl_msg_sz) - sizeof(uint32_t),
       comp_sz + ctl_msg_sz_with_off + sizeof(ctl_msg_sz) + sizeof(uint32_t))};
   }
 
-  void decode(FrameFlags, std::unique_ptr<folly::IOBuf> encodedReq,
+  void decode(bool, std::unique_ptr<folly::IOBuf> encodedReq,
               SimStats&, SimStreamingCallback& callback) override
   {
     folly::io::Cursor cursor(encodedReq.get());

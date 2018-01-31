@@ -40,10 +40,9 @@ class HPACKScheme : public CompressionScheme {
   std::unique_ptr<Ack> getAck(uint16_t seqn) override { return nullptr; }
   void recvAck(std::unique_ptr<Ack> ack) override {}
 
-  std::pair<FrameFlags, std::unique_ptr<folly::IOBuf>> encode(
-      bool /*newPacket*/,
-      std::vector<compress::Header> allHeaders,
-      SimStats& stats) override {
+  std::pair<bool, std::unique_ptr<folly::IOBuf>> encode(
+    std::vector<compress::Header> allHeaders,
+    SimStats& stats) override {
     auto block = client_.encode(allHeaders);
     block->prepend(sizeof(uint16_t));
     folly::io::RWPrivateCursor c(block.get());
@@ -51,11 +50,10 @@ class HPACKScheme : public CompressionScheme {
     stats.uncompressed += client_.getEncodedSize().uncompressed;
     stats.compressed += client_.getEncodedSize().compressed;
     // OOO is allowed with 0 table size
-    FrameFlags flags{.allowOOO = allowOOO_};
-    return {flags, std::move(block)};
+    return {allowOOO_, std::move(block)};
   }
 
-  void decode(FrameFlags flags, std::unique_ptr<folly::IOBuf> encodedReq,
+  void decode(bool allowOOO, std::unique_ptr<folly::IOBuf> encodedReq,
               SimStats& stats, SimStreamingCallback& callback) override {
     folly::io::Cursor cursor(encodedReq.get());
     auto seqn = cursor.readBE<uint16_t>();
@@ -66,7 +64,7 @@ class HPACKScheme : public CompressionScheme {
     encodedReq->trimStart(sizeof(uint16_t));
     serverQueue_.enqueueHeaderBlock(seqn,
                                     std::move(encodedReq),
-                                    len, &callback, flags.allowOOO);
+                                    len, &callback, allowOOO);
     callback.maybeMarkHolDelay();
     if (serverQueue_.getQueuedBytes() > stats.maxQueueBufferBytes) {
       stats.maxQueueBufferBytes = serverQueue_.getQueuedBytes();

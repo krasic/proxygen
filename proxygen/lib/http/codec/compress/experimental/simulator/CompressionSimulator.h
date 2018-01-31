@@ -32,19 +32,14 @@ class CompressionSimulator {
 
   // Called from CompressionScheme::runLoopCallback
   void flushSchemePackets(CompressionScheme* scheme);
-  void flushPacket(CompressionScheme* scheme);
  private:
-  void flushRequests(CompressionScheme* scheme);
   void setupRequest(uint16_t seqn, HTTPMessage&& msg,
                     std::chrono::milliseconds encodeDelay);
   CompressionScheme* getScheme(folly::StringPiece host);
   std::unique_ptr<CompressionScheme> makeScheme();
-  std::pair<FrameFlags, std::unique_ptr<folly::IOBuf>> encode(
-      CompressionScheme* scheme, bool newPacket, uint16_t seqn);
-  void decodePacket(CompressionScheme* scheme,
-                    std::list<std::tuple<FrameFlags, bool, std::unique_ptr<folly::IOBuf>,
-                    SimStreamingCallback*>>& blocks);
-  void decode(CompressionScheme* scheme, FrameFlags flags,
+  std::pair<bool, std::unique_ptr<folly::IOBuf>> encode(
+    CompressionScheme* scheme, uint16_t seqn);
+  void decode(CompressionScheme* scheme, bool allowOOO,
               std::unique_ptr<folly::IOBuf> encodedReq,
               SimStreamingCallback& cb);
   void scheduleEvent(folly::Function<void()> f, std::chrono::milliseconds ms);
